@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:640px;margin:40px auto">
+  <h1>{{ 'Not found' if status == 404 else ('Not allowed' if status == 403 else 'Something needs attention') }}</h1>
+  <p>{{ message }}</p>
+  <p><a class="btn secondary" href="javascript:history.back()">Go back</a> <a class="btn secondary" href="/">Events</a></p>
+</div>
+{% endblock %}

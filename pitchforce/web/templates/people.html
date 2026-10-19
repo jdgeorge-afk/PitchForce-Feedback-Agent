@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="sub">Correct names, confirm or reject proposed matches, and record how related companies are connected. Corrections apply to this event unless you choose <em>all events</em>.</p>
+
+<h2>Presenting companies</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>Company</th><th>Presenter(s)</th><th>Names seen in sources</th><th>Edit</th></tr></thead>
+<tbody>
+{% for c in companies %}
+<tr>
+  <td>{{ c.slot_order }}</td>
+  <td><a href="/events/{{ event.id }}/companies/{{ c.id }}"><strong>{{ c.display_name }}</strong></a>{% if c.name_raw and c.name_raw != c.display_name %}<div class="small muted">roster: {{ c.name_raw }}</div>{% endif %}</td>
+  <td>{% for p in people if p.company_id == c.id and p.role == 'presenter' %}
+      <div>{{ p.display_name }}{% if p.name_raw and p.name_raw != p.display_name %} <span class="small muted">(roster: {{ p.name_raw }})</span>{% endif %}<div class="small muted">{{ p.email_raw or 'no email supplied' }}</div>
+        {% for a in p.aliases %}<div class="small"><span class="badge {{ 'b-ok' if a.status == 'confirmed' else 'b-err' if a.status == 'rejected' else 'b-warn' }}">{{ a.status }}</span> also “{{ a.alias }}” <span class="muted">({{ a.source }}, {{ a.scope }})</span>
+          {% if a.status == 'proposed' %}<form method="post" action="/events/{{ event.id }}/people/action" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="alias_status"><input type="hidden" name="alias_id" value="{{ a.id }}"><button class="small" name="status" value="confirmed">Confirm</button> <button class="small secondary" name="status" value="rejected">Reject</button></form>{% endif %}</div>{% endfor %}
+      </div>{% else %}<span class="muted">none</span>{% endfor %}</td>
+  <td>{% for a in c.aliases %}<div class="small"><span class="badge {{ 'b-ok' if a.status == 'confirmed' else 'b-err' if a.status == 'rejected' else 'b-warn' }}">{{ a.status }}</span> “{{ a.alias }}” <span class="muted">({{ a.source }}{{ ', all events' if a.scope == 'global' }})</span>{% if a.note %}<div class="muted">{{ a.note }}</div>{% endif %}
+      {% if a.status == 'proposed' %}<form method="post" action="/events/{{ event.id }}/people/action" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="alias_status"><input type="hidden" name="alias_id" value="{{ a.id }}"><button class="small" name="status" value="confirmed">Confirm</button> <button class="small secondary" name="status" value="rejected">Reject</button></form>{% endif %}</div>{% else %}<span class="muted">—</span>{% endfor %}</td>
+  <td>
+    <details><summary>Edit</summary>
+      <form method="post" action="/events/{{ event.id }}/people/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="rename_company"><input type="hidden" name="company_id" value="{{ c.id }}">
+        <label>Display name</label><div class="row"><input type="text" name="name" value="{{ c.display_name }}"><button class="small">Rename</button></div></form>
+      <form method="post" action="/events/{{ event.id }}/people/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="company_alias"><input type="hidden" name="company_id" value="{{ c.id }}">
+        <label>Add another name for this company</label><input type="text" name="alias" placeholder="e.g. trading or product name">
+        <div class="row"><select name="status"><option value="confirmed">Same company (confirmed)</option><option value="rejected">Not this company</option></select>
+        <select name="scope"><option value="event">This event only</option><option value="global">All events</option></select><button class="small">Save</button></div></form>
+      {% for p in people if p.company_id == c.id and p.role == 'presenter' %}
+      <form method="post" action="/events/{{ event.id }}/people/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="person_alias"><input type="hidden" name="person_id" value="{{ p.id }}">
+        <label>Another name for {{ p.display_name }}</label><div class="row"><input type="text" name="alias" placeholder="as shown in the transcript"><input type="hidden" name="status" value="confirmed"><button class="small">Save</button></div>
+        <input type="text" name="note" placeholder="Note (e.g. operator confirmed by email)"></form>
+      {% endfor %}
+    </details>
+  </td>
+</tr>
+{% else %}<tr><td colspan="5" class="muted">No companies yet.</td></tr>{% endfor %}
+</tbody></table></div>
+<details class="card" style="margin-top:12px"><summary>Add a company by hand</summary>
+  <form method="post" action="/events/{{ event.id }}/people/action" class="grid g3"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="add_company">
+    <div><label>Company</label><input type="text" name="name" required></div><div><label>Presenter</label><input type="text" name="presenter"></div><div><label>Presenter email (if supplied)</label><input type="email" name="email"></div>
+    <div><button>Add company</button></div></form>
+</details>
+
+<h2>Related companies and names</h2>
+{% if rels %}
+<div class="table-wrap"><table><thead><tr><th>Name heard / seen</th><th>Roster company</th><th>Relationship</th><th>Status</th><th>Evidence</th><th>Decide</th></tr></thead><tbody>
+{% for r in rels %}<tr>
+  <td>{{ r.subject_label }}</td><td>{{ r.object_label }}</td><td>{{ r.relation|label }}</td>
+  <td><span class="badge {{ 'b-ok' if r.status == 'confirmed' else 'b-err' if r.status == 'rejected' else 'b-warn' }}">{{ r.status }}</span></td>
+  <td class="small">{{ (r.evidence or {}).get('note', '') }}{% if (r.evidence or {}).get('excerpt') %}<div class="excerpt">{{ r.evidence.excerpt[:260] }}</div>{% endif %}</td>
+  <td><form method="post" action="/events/{{ event.id }}/people/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="relationship"><input type="hidden" name="relationship_id" value="{{ r.id }}">
+    <select name="relation">{% for t in relation_types %}<option value="{{ t }}" {{ 'selected' if t == r.relation }}>{{ t|label }}</option>{% endfor %}</select>
+    <select name="scope"><option value="event">This event</option><option value="global">All events</option></select><button class="small">Record</button></form></td>
+</tr>{% endfor %}</tbody></table></div>
+<p class="help">Related legal entities (parent, licensor, subsidiary) are never merged into one company. “Same company”, product and trading names are recorded as aliases for matching only.</p>
+{% else %}<p class="muted">No related-company questions so far.</p>{% endif %}
+
+<h2>Judges</h2>
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Affiliation</th><th>Email</th><th>Attendance</th><th>Edit</th></tr></thead><tbody>
+{% for p in people if p.role == 'judge' %}{% set a = att.get(p.id) %}<tr>
+  <td>{{ p.display_name }}{% for al in p.aliases %}<div class="small muted">also “{{ al.alias }}” ({{ al.status }})</div>{% endfor %}</td>
+  <td>{{ p.affiliation or '' }}</td><td>{{ p.email_raw or '' }}{% if not p.email_raw %}<span class="muted small">not supplied</span>{% endif %}</td>
+  <td><form method="post" action="/events/{{ event.id }}/people/action" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="attendance"><input type="hidden" name="person_id" value="{{ p.id }}">
+    <select name="status">{% for v, l in [('present','Present'),('absent_confirmed','Confirmed absent'),('abstained_confirmed','Confirmed did not score'),('unknown','Unknown')] %}<option value="{{ v }}" {{ 'selected' if a and a.status == v }}>{{ l }}</option>{% endfor %}</select><button class="small secondary">Set</button></form>
+    {% if a and a.source == 'roster' %}<div class="small muted">from roster: “{{ (a.evidence or {}).get('raw', '') }}”</div>{% endif %}</td>
+  <td><details><summary>Edit</summary><form method="post" action="/events/{{ event.id }}/people/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="person_edit"><input type="hidden" name="person_id" value="{{ p.id }}">
+    <label>Name</label><input type="text" name="name" value="{{ p.display_name }}"><label>Affiliation</label><input type="text" name="affiliation" value="{{ p.affiliation or '' }}">
+    <label>Email</label><input type="email" name="email" value="{{ p.email_raw or '' }}"><label>Phone</label><input type="text" name="phone" value="{{ p.phone or '' }}"><p><button class="small">Save</button></p></form></details></td>
+</tr>{% else %}<tr><td colspan="5" class="muted">No judge roster. Names found in the transcript appear under Speakers below.</td></tr>{% endfor %}
+</tbody></table></div>
+<details class="card" style="margin-top:12px"><summary>Add a judge by hand</summary>
+  <form method="post" action="/events/{{ event.id }}/people/action" class="grid g3"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="add_judge">
+    <div><label>Name</label><input type="text" name="name" required></div><div><label>Affiliation</label><input type="text" name="affiliation"></div><div><label>Email (if supplied)</label><input type="email" name="email"></div><div><button>Add judge</button></div></form>
+</details>
+<details class="card"><summary>Enter a judge score by hand</summary>
+  <form method="post" action="/events/{{ event.id }}/people/action" class="grid g3"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="add_score">
+    <div><label>Company</label><select name="company_id">{% for c in companies %}<option value="{{ c.id }}">{{ c.display_name }}</option>{% endfor %}</select></div>
+    <div><label>Judge</label><select name="person_id">{% for p in people if p.role == 'judge' %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}</select></div>
+    <div><label>Score ({{ event.score_min|num(0) }}–{{ event.score_max|num(0) }})</label><input type="text" name="value" required></div><div><button>Save score</button></div></form>
+</details>
+
+<h2>Transcript speakers</h2>
+<p class="help">How each speaker label in the transcript is attributed. Corrections apply the next time processing runs.</p>
+<div class="table-wrap"><table><thead><tr><th>Speaker label (as in transcript)</th><th>Attributed to</th><th>Status</th><th>Correct</th></tr></thead><tbody>
+{% for m in speakers %}<tr>
+  <td>{{ m.speaker_label }}</td>
+  <td>{% if m.person_id %}{{ people_by_id[m.person_id].display_name }} <span class="small muted">({{ people_by_id[m.person_id].role }})</span>{% else %}<span class="muted">{{ m.role|label }}</span>{% endif %}<div class="small muted">{{ (m.evidence or {}).get('reason', '') }}</div></td>
+  <td><span class="badge {{ 'b-ok' if m.status in ('confirmed','confirmed_auto') else 'b-warn' if m.status == 'proposed' else '' }}">{{ m.status|label }}</span></td>
+  <td><form method="post" action="/events/{{ event.id }}/people/action" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="speaker"><input type="hidden" name="mapping_id" value="{{ m.id }}">
+    <select name="person_id"><option value="">— not a roster person —</option>{% for p in people %}<option value="{{ p.id }}" {{ 'selected' if m.person_id == p.id }}>{{ p.display_name }} ({{ p.role }})</option>{% endfor %}</select>
+    <select name="role">{% for r in ['host','judge','presenter','audience','unknown'] %}<option value="{{ r }}" {{ 'selected' if m.role == r }}>{{ r }}</option>{% endfor %}</select><button class="small secondary">Save</button></form></td>
+</tr>{% else %}<tr><td colspan="4" class="muted">No transcript speakers yet.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

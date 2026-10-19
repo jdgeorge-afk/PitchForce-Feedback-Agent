@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <div><h1>Events</h1><p class="sub">Saved PitchForce events and their processing status.</p></div>
+  <div class="row">
+    <a class="btn" href="/events/new">New event</a>
+    <form method="post" action="/events/sample"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button class="secondary" type="submit" title="Creates an event from synthetic data so you can try every screen">Load sample event</button></form>
+  </div>
+</div>
+{% if not rows %}
+<div class="card"><h2>Welcome</h2><p>Create an event, upload the recording, transcript, rosters, scores and poll exports, then review and download a package for each company.</p>
+<p>To explore first, use <strong>Load sample event</strong>: it builds a clearly labeled synthetic event (fictional people and companies).</p></div>
+{% else %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Event</th><th>Date</th><th>Format</th><th>Companies</th><th>Status</th><th>Needs review</th><th>Background work</th></tr></thead>
+  <tbody>
+  {% for r in rows %}{% set ev = r.event %}
+  <tr>
+    <td><a href="/events/{{ ev.id }}"><strong>{{ ev.name }}</strong></a>{% if ev.is_sample %} <span class="badge b-sample">Sample</span>{% endif %}</td>
+    <td class="nowrap">{{ ev.event_date }}</td><td>{{ ev.format|label }}</td><td>{{ r.companies }}</td>
+    <td><span class="badge {{ 'b-ok' if ev.status in ('review','complete') else 'b-info' if ev.status == 'processing' else '' }}">{{ ev.status|label }}</span></td>
+    <td>{% if r.reviews %}<a href="/events/{{ ev.id }}/review"><span class="badge b-warn">{{ r.reviews }} open</span></a>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{% if r.active_jobs %}<span class="badge b-info">{{ r.active_jobs }} running</span>{% endif %}{% if r.failed_jobs %} <span class="badge b-err">{{ r.failed_jobs }} failed</span>{% endif %}{% if not r.active_jobs and not r.failed_jobs %}<span class="muted">idle</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% endif %}
+{% endblock %}

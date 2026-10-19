@@ -1,0 +1,16 @@
+[project]
+name = "pitchforce-feedback"
+version = "0.1.0"
+description = "PitchForce Feedback: turn EcoVG PitchForce event materials into reviewed founder feedback packages."
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "e2e: browser end-to-end tests (need Playwright Chromium)",
+    "live: tests against real external providers (need credentials; skipped otherwise)",
+    "media: tests that run ffmpeg",
+]
+filterwarnings = ["ignore::DeprecationWarning"]

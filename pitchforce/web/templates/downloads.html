@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2 style="margin-top:0">Complete event package (organizer)</h2>
+  <p>Every company's founder package, plus the organizer-only audit workbook, issues summary and structured JSON export. Do not forward the organizer folder to founders.</p>
+  <form method="post" action="/events/{{ event.id }}/packages" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label class="inline"><input type="checkbox" name="include_clip" checked> include video clips</label><button>Build event package</button></form>
+  <ul>{% for a in event_arts %}<li><a href="/artifacts/{{ a.id }}/download">{{ a.filename }}</a> <span class="small muted">{{ a.size|mb }} · {{ a.created_at|dt }} UTC · {{ a.audience }}</span>{% if a.is_sample %} <span class="badge b-sample">sample</span>{% endif %}</li>{% endfor %}</ul>
+</div>
+<h2>Company packages (founder-facing)</h2>
+<p class="help">Each package contains only that company's report (PDF + Word), its interest workbook, the email draft, the evidence appendix, its clip (if rendered) and a manifest listing sources and limitations. Emails are never sent automatically.</p>
+{% for c in companies %}
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h3 style="margin:0"><a href="/events/{{ event.id }}/companies/{{ c.id }}">{{ c.display_name }}</a> <span class="badge {{ 'b-ok' if c.status == 'approved' else '' }}">{{ c.status }}</span></h3>
+    <form method="post" action="/events/{{ event.id }}/packages" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="company_id" value="{{ c.id }}">
+      <label class="inline small"><input type="checkbox" name="include_clip" checked> include clip</label><button class="small">{{ 'Rebuild' if arts[c.id] else 'Build' }} package</button></form>
+  </div>
+  {% if arts[c.id] %}<table style="margin-top:8px"><tbody>
+  {% for a in arts[c.id] %}<tr><td><a href="/artifacts/{{ a.id }}/download">{{ a.filename }}</a></td><td class="small">{{ a.kind|label }}</td><td class="small">{{ a.size|mb }}</td><td class="small">{{ a.created_at|dt }} UTC</td>
+    <td>{% if a.id in stale[c.id] %}<span class="badge b-warn" title="Sources, boundaries or report text changed after this file was made">out of date</span>{% else %}<span class="badge b-ok">current</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="muted small">Not built yet.</p>{% endif %}
+</div>
+{% endfor %}
+<div class="card" data-jobs data-event="{{ event.id }}" data-reload="1" data-limit="6"><h3 style="margin-top:0">Recent background work</h3>
+  <div class="table-wrap"><table><thead><tr><th>Task</th><th>Status</th><th>Stage</th><th>Progress</th><th>Attempts</th></tr></thead><tbody></tbody></table></div></div>
+{% endblock %}

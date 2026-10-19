@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="sub">Background work for this event. Jobs survive restarts; failed jobs can be retried and running jobs cancelled. One company's failure does not stop the others.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Task</th><th>Status</th><th>Stage</th><th>Progress</th><th>Attempts</th><th>Est. cost</th><th>Started</th><th></th></tr></thead><tbody>
+{% for j in jobs %}<tr>
+  <td>{{ j.kind|label }}{% if j.company_id in names %} – {{ names[j.company_id] }}{% endif %}{% if j.payload.get('source_id') in srcs %} – {{ srcs[j.payload.source_id] }}{% endif %}
+    {% if j.error %}<div class="small" style="color:var(--err)">{{ j.error[:400] }}</div>{% endif %}</td>
+  <td><span class="badge {{ {'succeeded':'b-ok','failed':'b-err','running':'b-info','cancelled':'b-warn'}.get(j.status,'') }}">{{ j.status }}</span></td>
+  <td class="small">{{ j.stage }}</td><td><div class="progress"><span style="width:{{ (j.progress*100)|round|int }}%"></span></div></td>
+  <td class="small">{{ j.attempts }}/{{ j.max_attempts }}</td><td class="small">{{ '$%.4f'|format(j.cost_estimate_usd or 0) if j.cost_estimate_usd else '—' }}</td>
+  <td class="small nowrap">{{ j.started_at|dt }}</td>
+  <td>{% if j.status in ('failed','cancelled') %}<form method="post" action="/jobs/{{ j.id }}/retry"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="small">Retry</button></form>
+      {% elif j.status in ('queued','running') %}<form method="post" action="/jobs/{{ j.id }}/cancel"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="small secondary">Cancel</button></form>{% endif %}</td>
+</tr>{% else %}<tr><td colspan="8" class="muted">No background work yet.</td></tr>{% endfor %}
+</tbody></table></div>
+<h2>AI and transcription usage</h2>
+{% if usage %}<div class="table-wrap"><table><thead><tr><th>When</th><th>Provider</th><th>Model</th><th>Purpose</th><th>Input tokens</th><th>Output tokens</th><th>Audio min</th><th>Est. cost</th></tr></thead><tbody>
+{% for u in usage %}<tr><td class="small">{{ u.created_at|dt }}</td><td>{{ u.provider }}</td><td>{{ u.model }}</td><td>{{ u.purpose }}</td><td>{{ u.input_tokens }}</td><td>{{ u.output_tokens }}</td><td>{{ '%.1f'|format(u.audio_minutes) if u.audio_minutes else '' }}</td><td>${{ '%.4f'|format(u.est_cost_usd) }}</td></tr>{% endfor %}
+</tbody></table></div><p class="help">Estimates use the per-token / per-minute prices in the server configuration; check your provider's current pricing.</p>
+{% else %}<p class="muted">No external AI or transcription usage for this event (offline analysis does not send data anywhere).</p>{% endif %}
+{% endblock %}

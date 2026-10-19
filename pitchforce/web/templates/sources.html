@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid g2">
+  <div class="card" data-uploader data-event="{{ event.id }}">
+    <h2 style="margin-top:0">Upload materials</h2>
+    <label for="kind">What is this file?</label>
+    <select id="kind" name="kind">
+      <option value="">Choose…</option>
+      {% for k, l in kinds.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}
+    </select>
+    <div class="dropzone" style="margin-top:10px">
+      <p>Drag files here, or <label class="inline" style="display:inline"><input type="file" multiple style="max-width:240px"></label></p>
+      <p class="help">Large recordings upload in {{ s.upload_chunk_mb }} MB pieces and resume automatically after a connection drop (re-select the same file to resume). Limit: {{ s.max_upload_mb }} MB for video, {{ s.max_document_upload_mb }} MB for documents.</p>
+    </div>
+    <div class="uploads" aria-live="polite"></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">What you have and what is missing</h2>
+    {% for r in inv.rows %}
+    <div class="cap"><span class="badge {{ {'present':'b-ok','missing':'','missing_required':'b-err','failed':'b-err','processing':'b-info'}[r.status] }}">{{ {'present':'received','missing':'not provided','missing_required':'needed','failed':'could not read','processing':'reading…'}[r.status] }}</span>
+      <div><strong>{{ r.label }}</strong><div class="small muted">{{ r.why }}</div></div></div>
+    {% endfor %}
+  </div>
+</div>
+<h2>Source inventory</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>File</th><th>Type</th><th>Status</th><th>What was found</th><th>Options</th></tr></thead>
+<tbody>
+{% for src in inv.sources %}{% set j = jobs.get(src.id) %}
+<tr>
+  <td><strong>{{ src.original_filename }}</strong><div class="small muted">{{ src.size|mb }} · sha256 {{ src.sha256[:12] }}… · {{ src.created_at|dt }}</div></td>
+  <td>{{ kinds.get(src.kind, src.kind) }}{% if src.kind == 'transcript' %}<div class="small muted">timestamps: {{ {'wall_clock':'event clock (e.g. 16:18:34)','media':'recording time (e.g. 01:08:25.6)','none':'none'}.get(src.time_basis, src.time_basis) }}{% if (src.meta or {}).get('primary') %} · <strong>used for analysis</strong>{% endif %}</div>{% endif %}</td>
+  <td>
+    {% if src.status == 'parsed' %}<span class="badge b-ok">read</span>
+    {% elif src.status == 'failed' %}<span class="badge b-err">could not read</span><div class="small" style="color:var(--err)">{{ src.parse_error }}</div>
+    {% elif src.status == 'ignored' %}<span class="badge">not used</span>
+    {% else %}<span class="badge b-info">{{ j.stage if j else 'waiting' }}</span>{% endif %}
+  </td>
+  <td class="small">
+    {% set ps = src.parse_summary or {} %}
+    {% for k, v in ps.items() if k not in ('warnings',) and v is not mapping and v is not iterable or v is string %}{{ k|label }}: <strong>{{ v }}</strong>{{ '; ' if not loop.last }}{% endfor %}
+    {% if ps.get('by_status') %}<div>scores: {% for k, v in ps.by_status.items() %}{{ k|label }} {{ v }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+    {% for w in ps.get('warnings', []) %}<div class="b-warn badge" style="white-space:normal">{{ w }}</div>{% endfor %}
+    {% if src.kind == 'video' and (src.meta or {}).get('probe') %}{% set pr = src.meta.probe %}<div>duration {{ pr.duration_s|hms }} · {{ pr.streams|join(', ') }}</div>{% endif %}
+  </td>
+  <td>
+    <form method="post" action="/events/{{ event.id }}/sources/{{ src.id }}/options" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      {% if src.kind == 'transcript' %}
+        <select name="time_basis" aria-label="Timestamp type"><option value="wall_clock" {{ 'selected' if src.time_basis == 'wall_clock' }}>Event-clock times</option><option value="media" {{ 'selected' if src.time_basis == 'media' }}>Recording-relative times</option></select>
+        <button class="small secondary" name="action" value="time_basis">Set</button>
+        <button class="small secondary" name="action" value="primary">Use for analysis</button>
+      {% endif %}
+      {% if src.kind == 'video' %}<button class="small secondary" name="action" value="transcribe" title="{{ transcription }}">Transcribe</button>{% endif %}
+      <button class="small secondary" name="action" value="reparse">Re-read</button>
+      {% if src.status != 'ignored' %}<button class="small secondary" name="action" value="ignore">Don't use</button>{% endif %}
+    </form>
+  </td>
+</tr>
+{% else %}<tr><td colspan="5" class="muted">Nothing uploaded yet.</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="help">Transcription: {{ transcription }}</p>
+<div class="card" style="margin-top:16px">
+  <h2 style="margin-top:0">No roster file?</h2>
+  <p>Add companies, presenters and judges by hand on the <a href="/events/{{ event.id }}/people">Companies &amp; people</a> page. Judge scores can also be typed in there.</p>
+</div>
+{% endblock %}

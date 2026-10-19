@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <div>
+    <h2 style="margin:0">{{ company.display_name }} <span class="badge {{ 'b-ok' if company.status in ('ready','approved') else 'b-err' if company.status == 'failed' else '' }}">{{ company.status }}</span></h2>
+    <p class="sub">Presenter: {% for p in presenters %}{{ p.display_name }}{{ ', ' if not loop.last }}{% else %}<span class="muted">not on roster</span>{% endfor %}
+      {% for k in ['pitch','qa','feedback'] if segments.get(k) %} · {{ k|label }} {{ segments[k].evidence.get('start_raw','') }}–{{ segments[k].evidence.get('end_raw','') }}{% endfor %}</p>
+  </div>
+  <div class="row">
+    <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="tab" value="{{ tab }}">
+      <button class="secondary" name="action" value="regenerate" title="Re-extract and redraft; approved and edited sections are kept">Regenerate</button>
+      {% if company.status != 'approved' %}<button name="action" value="approve">Mark reviewed &amp; approved</button>{% endif %}</form>
+  </div>
+</div>
+{% if running %}<div class="flash info">Background work in progress: {{ running.kind|label }} — {{ running.stage }}. Refresh in a moment.</div>{% endif %}
+{% if company.last_error %}<div class="flash error">Last processing error: {{ company.last_error }} — use Regenerate to retry. Other companies are not affected.</div>{% endif %}
+{% if reviews %}<div class="flash info">{{ reviews|length }} open review item{{ 's' if reviews|length != 1 }} for this company:
+  {% for r in reviews[:4] %}<a href="/events/{{ event.id }}/review#r-{{ r.id }}">{{ r.title }}</a>{{ '; ' if not loop.last }}{% endfor %}</div>{% endif %}
+<nav class="tabs" aria-label="Company workspace">
+  {% for t in tabs %}<a href="?tab={{ t }}" class="{{ 'active' if t == tab }}">{{ {'report':'Report','questions':'Questions','feedback':'Feedback','score':'Score','interest':'Interest','video':'Video clip','transcript':'Transcript'}[t] }}</a>{% endfor %}
+</nav>
+
+{% if tab == 'report' %}
+  <p class="help">About {{ words }} words (target 650–900). Edit any section; edits and approvals are never overwritten by regeneration — if the evidence changes later, the section is flagged instead.
+  {% if stale_artifacts %}<span class="badge b-warn">{{ stale_artifacts|length }} downloaded file(s) are out of date — rebuild on the Downloads page</span>{% endif %}</p>
+  <div class="report">
+  {% for s in sections %}
+    <div class="section" id="sec-{{ s.key }}">
+      {% if s.key != 'header' %}<h3>{{ s.title }}
+        {% if s.approved %}<span class="badge b-ok">approved</span>{% endif %}
+        {% if s.edited_text is not none %}<span class="badge b-info">edited</span>{% endif %}
+        {% if s.stale %}<span class="badge b-warn" title="{{ s.stale_reason }}">needs review</span>{% endif %}
+        {% if (s.model_meta or {}).get('generator') == 'ai' %}<span class="badge">AI draft</span>{% endif %}</h3>{% endif %}
+      {% if s.stale %}<p class="small" style="color:#8a5a00">{{ s.stale_reason }}</p>{% endif %}
+      {{ s.text|md }}
+      <details><summary class="small">Edit this section</summary>
+        <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/sections/{{ s.key }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <textarea class="tall" name="text" aria-label="Section text">{{ s.text }}</textarea>
+          <p class="help">Format: blank line between paragraphs, “- ” for bullets, “### ” for a sub-heading, **bold**, [label](https://link).</p>
+          <div class="tools">
+            <button class="small" name="action" value="save">Save edit</button>
+            {% if not s.approved %}<button class="small secondary" name="action" value="approve">Approve</button>{% else %}<button class="small secondary" name="action" value="unapprove">Unapprove</button>{% endif %}
+            {% if s.edited_text is not none %}<button class="small secondary" name="action" value="revert">Revert to generated text</button>{% endif %}
+            <button class="small secondary" name="action" value="regenerate">Regenerate this section</button>
+            <label class="inline small"><input type="checkbox" name="discard"> discard my edit when regenerating</label>
+          </div>
+          {% if s.edited_text is not none and s.generated_text != s.edited_text %}<details><summary class="small">Show latest generated draft</summary><div class="excerpt">{{ s.generated_text }}</div></details>{% endif %}
+        </form>
+      </details>
+    </div>
+  {% else %}<p class="muted">No report yet. Run processing from the event overview.</p>{% endfor %}
+  </div>
+
+{% elif tab == 'questions' %}
+  <p class="help">Every question extracted from the Q&amp;A, with the original wording. Moderator questions are labeled separately. Rows highlighted in yellow are incomplete or have gaps in the recording — nothing was reconstructed.</p>
+  <div class="table-wrap"><table><thead><tr><th>#</th><th>Asked by</th><th>Original wording</th><th>Paraphrase</th><th>Founder's answer</th><th>Open points</th><th></th></tr></thead><tbody>
+  {% for q in questions %}<tr class="{{ 'gap' if q.completeness != 'complete' }}" style="{{ 'opacity:.5' if q.status == 'rejected' }}">
+    <td>{{ q.seq }}{% if q.is_followup %}<div class="small muted">follow-up</div>{% endif %}</td>
+    <td>{{ q.asker_label }}<div><span class="badge {{ 'b-info' if q.asker_role == 'investor' else '' }}">{{ q.asker_role }}</span></div><div class="small muted">{{ q.at_raw }}</div></td>
+    <td><div class="excerpt">{{ q.original_excerpt }}</div></td>
+    <td>{{ q.paraphrase }}{% for p in parts.get(q.id, []) %}<div class="small">({{ p.part_label }}) {{ p.paraphrase }}</div>{% endfor %}</td>
+    <td>{% if q.answer_excerpt %}<div class="excerpt">{{ q.answer_excerpt[:600] }}</div><div class="small muted">{{ q.answer_at_raw }}</div>{% else %}<span class="muted">no answer recorded</span>{% endif %}</td>
+    <td>{{ q.unresolved }}{% if q.completeness != 'complete' %}<div><span class="badge b-warn">{{ q.completeness }}</span></div>{% endif %}</td>
+    <td><details><summary class="small">Edit</summary><form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="question"><input type="hidden" name="tab" value="questions"><input type="hidden" name="question_id" value="{{ q.id }}">
+      <label>Paraphrase</label><textarea name="paraphrase">{{ q.paraphrase }}</textarea><label>Open points</label><textarea name="unresolved">{{ q.unresolved }}</textarea>
+      <label>Asked by role</label><select name="asker_role">{% for r in ['investor','moderator','audience','unknown'] %}<option {{ 'selected' if r == q.asker_role }}>{{ r }}</option>{% endfor %}</select>
+      <div class="tools"><button class="small" name="op" value="save">Save</button><button class="small secondary" name="op" value="confirm">Confirm</button><button class="small secondary" name="op" value="reject">Not a question</button></div></form></details></td>
+  </tr>{% else %}<tr><td colspan="7" class="muted">No questions extracted.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <h3>Presenter claims (kept separate; not verified)</h3>
+  <p class="help">Statements about regulatory status, results, IP, funding, contracts or projections are claims made by the presenter. They are not presented as verified unless you mark them verified with evidence.</p>
+  <ul>{% for c in claims %}<li><span class="badge">{{ c.category }}</span> “{{ c.text }}” <span class="small muted">{{ c.at_raw }}</span> {% if c.verified %}<span class="badge b-ok">operator-verified</span>{% endif %}
+    <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="claim"><input type="hidden" name="tab" value="questions"><input type="hidden" name="claim_id" value="{{ c.id }}">
+    <button class="link small" name="op" value="{{ 'unverify' if c.verified else 'verify' }}">{{ 'Mark unverified' if c.verified else 'I verified this' }}</button></form></li>{% else %}<li class="muted">None detected.</li>{% endfor %}</ul>
+
+{% elif tab == 'feedback' %}
+  <p class="help">Each panelist's distinct points as spoken. “Nothing to add” is kept as such, and a panelist who said nothing is shown as silent — no feedback is invented. The report may group repeated themes; this view keeps the full record.</p>
+  {% for speaker, items in feedback_by.items() %}
+  <div class="card"><h3 style="margin-top:0">{{ speaker }}</h3>
+    {% for f in items %}<div style="{{ 'opacity:.5' if f.status == 'rejected' }}" class="cap">
+      <span class="badge {{ 'b-ok' if f.kind == 'positive' else 'b-info' if f.kind == 'recommendation' else 'b-warn' if f.kind == 'silent' else '' }}">{{ f.kind|label }}</span>
+      <div style="flex:1">{{ f.point }} <span class="small muted">{{ f.at_raw }}{% if f.theme and f.theme != 'other' %} · {{ f.theme|label }}{% endif %}</span>
+        {% if f.original_excerpt and f.original_excerpt != f.point %}<div class="excerpt">{{ f.original_excerpt }}</div>{% endif %}
+        <details><summary class="small">Edit</summary><form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="feedback"><input type="hidden" name="tab" value="feedback"><input type="hidden" name="feedback_id" value="{{ f.id }}">
+          <textarea name="point">{{ f.point }}</textarea>
+          <div class="row"><select name="kind">{% for k in ['positive','recommendation','comment','nothing_to_add','silent'] %}<option value="{{ k }}" {{ 'selected' if k == f.kind }}>{{ k|label }}</option>{% endfor %}</select>
+          <select name="theme">{% for t in ['timeline_spend','answer_length','ip_competition','investor_return','slides','regulatory','market','traction','team','financials','clarity','other'] %}<option value="{{ t }}" {{ 'selected' if t == f.theme }}>{{ t|label }}</option>{% endfor %}</select>
+          <button class="small" name="op" value="save">Save</button><button class="small secondary" name="op" value="reject">Remove</button></div></form></details>
+      </div></div>{% endfor %}
+  </div>
+  {% else %}<p class="muted">No feedback extracted.</p>{% endfor %}
+
+{% elif tab == 'score' %}
+  {% set r = result %}
+  <div class="grid g2">
+  <div class="card"><h3 style="margin-top:0">Result</h3>
+  {% if r %}
+    <dl class="kv">
+      <dt>Status</dt><dd>{{ {'verified':'Verified from individual scores','verified_with_imputation':'Verified, with approved missing-judge rule','incomplete':'Incomplete — not final','announced_only':'Announced total only (not recalculated)','unavailable':'Unavailable'}[r.status] }}</dd>
+      <dt>Expected judges</dt><dd>{{ r.expected_judges }}</dd>
+      <dt>Verified submitted scores</dt><dd>{{ r.valid_count }}</dd>
+      <dt>Raw sum</dt><dd>{{ r.raw_sum|num(2) }}</dd>
+      <dt>Imputed contribution</dt><dd>{% if r.imputed_contribution is not none %}{{ r.imputed_contribution|num(2) }} <span class="badge b-warn">imputed — not a judge's score</span>{% else %}—{% endif %}</dd>
+      <dt>Adjusted total</dt><dd>{{ r.adjusted_total|num(event.score_display_decimals) }}{% if r.denominator %} / {{ r.denominator|num(0) }}{% endif %}</dd>
+      <dt>Announced total</dt><dd>{{ r.announced_value|num(event.score_display_decimals) }}</dd>
+      <dt>Discrepancy</dt><dd>{% if r.discrepancy %}<span class="badge b-err">{{ r.discrepancy|num(2) }}</span>{% else %}—{% endif %}</dd>
+    </dl>
+    {% for e in (r.details or {}).get('explanation', []) %}<p class="small">{{ e }}</p>{% endfor %}
+  {% else %}<p class="muted">Not calculated yet.</p>{% endif %}
+  </div>
+  <div class="card"><h3 style="margin-top:0">Judge attendance</h3>
+    <ul>{% for j in judges %}{% set a = att.get(j.id) %}<li>{{ j.display_name }} — <span class="badge {{ 'b-warn' if a and a.status in ('absent_confirmed','abstained_confirmed') else '' }}">{{ (a.status if a else 'unknown')|label }}</span></li>{% else %}<li class="muted">No judge roster.</li>{% endfor %}</ul>
+    <p class="help">Change attendance on the <a href="/events/{{ event.id }}/people">Companies &amp; people</a> page. A missing score is never treated as an absence.</p>
+  </div></div>
+  <h3>Individual scores</h3>
+  <div class="table-wrap"><table><thead><tr><th>Judge (as in source)</th><th>Score (as in source)</th><th>Status</th><th>Source</th><th></th></tr></thead><tbody>
+  {% for s in scores %}<tr><td>{{ s.judge_label_raw }}</td><td>{{ s.value_raw or '(blank)' }}</td>
+    <td><span class="badge {{ 'b-ok' if s.status == 'valid' else 'b-err' }}">{{ s.status|label }}</span><div class="small muted">{{ s.status_reason }}</div></td>
+    <td class="small">{{ s.source_kind }} {{ (s.source_ref or {}).get('ref','') }}</td>
+    <td>{% if s.status != 'rejected' %}<form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="score_status"><input type="hidden" name="tab" value="score"><input type="hidden" name="score_id" value="{{ s.id }}"><input type="text" name="note" placeholder="reason" style="max-width:140px"><button class="small secondary" name="op" value="reject">Exclude</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No individual scores for this company. The application does not compute a total from assumptions or work backwards from an announced total.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <h3>Announced totals</h3>
+  <ul>{% for a in announced %}<li><strong>{{ a.value_raw }}</strong>{% if a.denominator %} / {{ a.denominator|num(0) }}{% endif %} — {{ a.source_kind }} {{ a.at_raw }} {% if a.speaker %}({{ a.speaker }}){% endif %} <span class="badge">{{ a.status }}</span>
+    {% if a.excerpt %}<div class="excerpt">{{ a.excerpt }}</div>{% endif %}
+    {% if a.status == 'candidate' %}<form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="announced"><input type="hidden" name="tab" value="score"><input type="hidden" name="announced_id" value="{{ a.id }}"><button class="small" name="op" value="confirm">Confirm</button> <button class="small secondary" name="op" value="reject">Reject</button></form>{% endif %}</li>
+  {% else %}<li class="muted">None found.</li>{% endfor %}</ul>
+  <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="announced"><input type="hidden" name="tab" value="score"><input type="hidden" name="op" value="add">
+    <input type="text" name="value" placeholder="Announced total" style="max-width:140px"><input type="text" name="note" placeholder="Where it was announced" style="max-width:280px"><button class="small secondary">Add announced total</button></form>
+
+{% elif tab == 'interest' %}
+  {% set s = summary %}
+  {% if s.status != 'available' %}<div class="card"><p><span class="badge b-warn">{{ s.status|label }}</span> {{ s.note }}</p></div>
+  {% else %}
+  <div class="card"><h3 style="margin-top:0">Event poll summary ({{ s.respondents }} unique respondent{{ 's' if s.respondents != 1 }}{% if s.anonymous %}, {{ s.anonymous }} anonymous{% endif %})</h3>
+    <div class="row">{% for k, v in s.by_category.items() %}<span class="badge {{ 'b-ok' if k in ('invest','meeting','due_diligence') else 'b-info' if k in ('more_info','introduction','mentoring','free_resource') else '' }}">{{ labels[k] }}: {{ v }}</span>{% endfor %}</div>
+    <p class="help">A person who chose several options counts once in each category and once in the total. “Needs more information” is not investment interest.</p></div>
+  <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="outreach"><input type="hidden" name="tab" value="interest">
+  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name (as supplied)</th><th>Email (as supplied)</th><th>Submitted</th><th>Exact response</th><th>Categories</th><th>Notes</th><th>Outreach status</th></tr></thead><tbody>
+  {% for r in s.responses %}<tr style="{{ 'opacity:.55' if r.superseded_by_id or r.duplicate_of_id }}">
+    <td>{{ r.original_response_id }}</td><td>{{ r.name or '(anonymous)' }}</td><td>{{ r.email_raw }}</td><td class="nowrap small">{{ r.submitted_raw }}</td>
+    <td><div class="excerpt">{{ r.answer_raw }}</div></td>
+    <td>{% for c in r.choices %}<span class="badge">{{ labels[c.category] }}</span> {% endfor %}</td>
+    <td class="small">{% if r.superseded_by_id %}superseded by a later submission{% endif %}{% if r.duplicate_of_id %}duplicate{% endif %}{% if r.has_conflict %}<span class="badge b-warn">contradictory selections</span>{% endif %} {{ r.review_reason }}</td>
+    <td>{% if not r.superseded_by_id and not r.duplicate_of_id %}<select name="status_{{ r.id }}">{% for st in statuses %}<option {{ 'selected' if st == r.outreach_status }}>{{ st }}</option>{% endfor %}</select><input type="text" name="note_{{ r.id }}" value="{{ r.outreach_note }}" placeholder="note">{% endif %}</td>
+  </tr>{% endfor %}</tbody></table></div>
+  <p><button>Save outreach statuses</button> <span class="help">The founder workbook lists actionable rows; explicit “not interested” responses stay only in the responses sheet.</span></p></form>
+  {% endif %}
+
+{% elif tab == 'video' %}
+  {% if not videos %}<div class="card"><p><span class="badge b-warn">unavailable</span> No recording was uploaded for this event, so no clip can be made. Reports will say the clip is unavailable.</p></div>
+  {% elif not clip %}<div class="card"><p class="muted">No clip candidate yet — run processing first.</p></div>
+  {% else %}
+  <div class="grid g2">
+    <div class="card" data-clip-editor>
+      <h3 style="margin-top:0">Clip: pitch through final feedback <span class="badge {{ 'b-ok' if clip.status in ('rendered','reviewed','shared') else 'b-err' if clip.status in ('failed','unavailable') else 'b-warn' }}">{{ clip.status|label }}</span></h3>
+      {% if clip.status_reason %}<p class="small">{{ clip.status_reason }}</p>{% endif %}
+      <video controls preload="metadata" src="/events/{{ event.id }}/media/{{ videos[0].id }}{% if clip.start_media_s is not none %}#t={{ '%.1f'|format(clip.start_media_s) }}{% endif %}"></video>
+      <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/clip">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <div class="grid g2">
+          <div><label>Start (recording time)</label><input type="text" name="start" value="{{ clip.start_media_s|hms if clip.start_media_s is not none else '' }}">
+            <div class="row small"><button class="small secondary" data-set="start">Set to player</button><button class="small secondary" data-go="start">Play from</button><button class="small secondary" data-nudge="start:-5">−5s</button><button class="small secondary" data-nudge="start:5">+5s</button></div></div>
+          <div><label>End (recording time)</label><input type="text" name="end" value="{{ clip.end_media_s|hms if clip.end_media_s is not none else '' }}">
+            <div class="row small"><button class="small secondary" data-set="end">Set to player</button><button class="small secondary" data-go="end">Play to end</button><button class="small secondary" data-nudge="end:-5">−5s</button><button class="small secondary" data-nudge="end:5">+5s</button></div></div>
+        </div>
+        <p class="small">Length: <strong data-duration></strong> (real content; nothing is padded or trimmed to a target length). Boundaries: {{ 'set by you' if clip.boundary_source == 'operator' else 'detected from the transcript' }}.</p>
+        <div class="tools">
+          <button name="action" value="boundaries" class="secondary">Save boundaries</button>
+          <button name="action" value="reset" class="secondary">Reset to detected</button>
+          <label class="inline small"><input type="checkbox" name="confirm"> Boundaries checked</label>
+          <button name="action" value="render">Render clip</button>
+        </div>
+      </form>
+      {% if clip.validation %}<h3>Checks on the rendered clip</h3><ul class="small">
+        {% for c in clip.validation.get('checks', []) %}<li>✓ {{ c }}</li>{% endfor %}
+        {% for p in clip.validation.get('problems', []) %}<li style="color:var(--err)">✗ {{ p }}</li>{% endfor %}</ul>
+        <div class="row">{% if clip.validation.get('thumbnails', {}).get('start') %}<figure><img alt="First frame" src="/events/{{ event.id }}/companies/{{ company.id }}/thumb/start" width="200"><figcaption class="small">first frame</figcaption></figure>{% endif %}
+        {% if clip.validation.get('thumbnails', {}).get('end') %}<figure><img alt="Last frame" src="/events/{{ event.id }}/companies/{{ company.id }}/thumb/end" width="200"><figcaption class="small">last frame</figcaption></figure>{% endif %}</div>
+      {% endif %}
+      {% if clip.storage_key %}<h3>Rendered clip ({{ clip.duration_s|dur }})</h3><video controls preload="metadata" src="/events/{{ event.id }}/companies/{{ company.id }}/clipfile"></video>
+        <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/clip" class="tools"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+          {% if clip.status == 'rendered' %}<button name="action" value="reviewed" class="secondary">Mark clip reviewed</button>{% endif %}
+          {% if clip_art %}<a class="btn secondary" href="/artifacts/{{ clip_art.id }}/download">Download MP4</a>{% endif %}
+          <input type="number" name="days" value="{{ settings.share_link_days }}" min="1" max="90" style="width:80px" aria-label="Link lifetime in days"><button name="action" value="share" class="secondary">Create expiring share link</button></form>
+      {% endif %}
+      {% for sl in shares %}<div class="small">Share link created {{ sl.created_at|dt }}, expires {{ sl.expires_at|dt }} {% if sl.revoked %}<span class="badge">revoked</span>{% else %}
+        <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/clip" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="share_id" value="{{ sl.id }}"><button class="link small" name="action" value="revoke">Revoke</button></form>{% endif %}</div>{% endfor %}
+      {% if clip.share_url %}<p class="small">Current link: <code>{{ clip.share_url }}</code></p>{% endif %}
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Transcript around this clip</h3>
+      <p class="help">Click a line to jump the player there. Times are recording time{% if alignment %} (alignment: {{ alignment.method|label }}, {{ alignment.status }}){% endif %}. Faded lines belong to other companies.</p>
+      <div class="cues" data-clip-editor-cues>{% for c in cues %}<div class="cue {{ '' if c.company else 'other' }}" data-t="{{ c.t }}"><span class="t">{{ c.t|hms }}</span><span><strong>{{ c.speaker }}</strong> {{ c.text }}{% if c.q != 'mapped' %} <span class="badge b-warn">{{ c.q }}</span>{% endif %}</span></div>{% else %}<p class="muted small">No aligned transcript lines.</p>{% endfor %}</div>
+      {% if alignment %}<details><summary class="small">Alignment details</summary><p class="small">{{ alignment.notes }}</p><p class="small">Anchors: {{ (alignment.anchors or [])|length }} · max residual {{ alignment.residual_max_s }}s · drift {{ 'detected' if alignment.drift_detected else 'not detected' }}</p></details>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+{% elif tab == 'transcript' %}
+  <p class="help">This company's transcript lines (with a few lines of context). Select lines to move them to a different company, or correct a speaker. Gaps are highlighted and never filled in.</p>
+  <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="assign_utterances"><input type="hidden" name="tab" value="transcript">
+  <div class="row" style="margin-bottom:8px"><label class="inline"><input type="checkbox" data-check-all="input[name=utterance_id]"> select all</label>
+    <select name="target_company_id"><option value="">(no company)</option>{% for c in companies %}<option value="{{ c.id }}" {{ 'selected' if c.id == company.id }}>{{ c.display_name }}</option>{% endfor %}</select>
+    <button class="small">Assign selected lines</button></div>
+  <div class="table-wrap"><table><thead><tr><th></th><th>Time (as in transcript)</th><th>Speaker</th><th>Text</th><th>Part</th></tr></thead><tbody>
+  {% for u in utts %}<tr class="{{ 'gap' if u.is_gap }}" style="{{ '' if u.company_id == company.id else 'opacity:.55' }}">
+    <td><input type="checkbox" name="utterance_id" value="{{ u.id }}" aria-label="select line"></td>
+    <td class="nowrap small">{{ u.start_raw }}<div class="muted">{{ u.cue_ref }}</div></td>
+    <td class="small">{{ u.speaker }}{% if u.speaker_override %}<div class="muted">source: {{ u.speaker_label }}</div>{% endif %}</td>
+    <td>{{ u.text }}{% if u.assignment_source == 'operator' %} <span class="badge b-info">assigned by you</span>{% endif %}</td>
+    <td class="small">{% if seg_by_start.get(u.id) %}<span class="badge b-ok">{{ seg_by_start[u.id].kind|label }} starts</span>{% endif %}{% if seg_by_end.get(u.id) %}<span class="badge">{{ seg_by_end[u.id].kind|label }} ends</span>{% endif %}</td>
+  </tr>{% endfor %}</tbody></table></div></form>
+  <details class="card" style="margin-top:12px"><summary>Correct a speaker</summary>
+    <form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="speaker_override"><input type="hidden" name="tab" value="transcript">
+      <select name="utterance_id">{% for u in utts %}<option value="{{ u.id }}">{{ u.start_raw }} {{ u.speaker }}: {{ u.text[:60] }}</option>{% endfor %}</select>
+      <input type="text" name="speaker" placeholder="Correct speaker name" style="max-width:240px"><button class="small">Save</button></form></details>
+  <h3>Boundaries</h3>
+  <ul>{% for k, s in segments.items() %}<li>{{ k|label }}: {{ s.evidence.get('start_raw','') }}–{{ s.evidence.get('end_raw','') }} <span class="badge {{ 'b-ok' if s.status == 'confirmed' else 'b-warn' if s.status == 'needs_review' else '' }}">{{ s.status|label }}</span> <span class="small muted">{{ s.method }}</span>
+    {% if s.status != 'confirmed' %}<form method="post" action="/events/{{ event.id }}/companies/{{ company.id }}/action" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="segment"><input type="hidden" name="tab" value="transcript"><input type="hidden" name="segment_id" value="{{ s.id }}"><button class="link small" name="op" value="confirm">Confirm</button></form>{% endif %}</li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}

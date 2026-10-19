@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<ol class="steps" aria-label="Workflow">
+  {% for label, done, href in steps %}<li class="{{ 'done' if done }}"><a href="{{ href }}">{{ label }}</a></li>{% endfor %}
+</ol>
+<div class="grid g2">
+  <div class="card">
+    <h2 style="margin-top:0">What can be produced</h2>
+    {% for name, status, why in inv.capabilities %}
+    <div class="cap"><span class="badge {{ {'available':'b-ok','limited':'b-warn','unavailable':'b-err','action':'b-info'}[status] }}">{{ status }}</span>
+      <div><strong>{{ name }}</strong>{% if why %}<div class="small muted">{{ why }}</div>{% endif %}</div></div>
+    {% endfor %}
+    <p class="small"><a href="/events/{{ event.id }}/sources">Manage sources →</a></p>
+  </div>
+  <div class="card" id="process">
+    <h2 style="margin-top:0">Processing</h2>
+    <p>Reads every source, finds each company's pitch, Q&amp;A and feedback, extracts questions and feedback, checks scores and poll responses, and drafts reports. Your confirmed corrections and edits are kept.</p>
+    <form method="post" action="/events/{{ event.id }}/process"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit">{{ 'Run processing again' if event.status in ('review','complete','processing') else 'Run processing' }}</button></form>
+    <p class="help">Analysis: {{ 'Anthropic Claude (configured; transcript text is sent to Anthropic)' if settings.ai_configured else 'offline rule-based analysis (no data leaves this server)' }} · estimated AI/transcription cost so far: ${{ '%.2f'|format(cost) }}</p>
+    {% if reviews %}<p><a href="/events/{{ event.id }}/review"><span class="badge {{ 'b-err' if high else 'b-warn' }}">{{ reviews }} item{{ 's' if reviews != 1 }} need review{% if high %} ({{ high }} important){% endif %}</span></a></p>{% endif %}
+  </div>
+</div>
+<div class="card" data-jobs data-event="{{ event.id }}" data-reload="1" data-limit="10">
+  <h2 style="margin-top:0">Background work</h2>
+  <div class="table-wrap"><table><thead><tr><th>Task</th><th>Status</th><th>Stage</th><th>Progress</th><th>Attempts</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
+  <p class="small"><a href="/events/{{ event.id }}/jobs">All activity, retries and cancellation →</a></p>
+</div>
+<h2>Companies</h2>
+{% if companies %}
+<div class="table-wrap"><table><thead><tr><th>#</th><th>Company</th><th>Status</th><th></th></tr></thead><tbody>
+{% for c in companies %}<tr><td>{{ c.slot_order }}</td><td><a href="/events/{{ event.id }}/companies/{{ c.id }}">{{ c.display_name }}</a></td>
+<td><span class="badge {{ 'b-ok' if c.status in ('ready','approved') else 'b-err' if c.status == 'failed' else '' }}">{{ c.status }}</span>{% if c.last_error %}<div class="small" style="color:var(--err)">{{ c.last_error[:200] }}</div>{% endif %}</td>
+<td><a href="/events/{{ event.id }}/companies/{{ c.id }}">Open workspace</a></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="muted">No companies yet. Upload a company roster or add companies on the <a href="/events/{{ event.id }}/people">Companies &amp; people</a> page.</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="sub">All companies at a glance. Ranks are shown only for verified totals; ties share a rank and no tiebreaker is applied.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Company</th><th>Score</th><th>Rank</th><th>Announced</th><th>Interest (event poll)</th><th>Clip</th><th>Review</th><th>Status</th></tr></thead>
+<tbody>
+{% for row in rows %}{% set r = row.r %}{% set s = row.interest %}
+<tr>
+  <td><a href="/events/{{ event.id }}/companies/{{ row.c.id }}"><strong>{{ row.c.display_name }}</strong></a></td>
+  <td>{% if r and r.adjusted_total is not none %}<strong>{{ r.adjusted_total|num(event.score_display_decimals) }}</strong> / {{ r.denominator|num(0) }}{% if r.imputed_contribution %} <span class="badge b-warn" title="includes imputed contribution">imputed</span>{% endif %}
+      {% elif r %}<span class="badge {{ 'b-warn' if r.status != 'unavailable' else '' }}">{{ r.status|label }}</span>{% else %}—{% endif %}
+      {% if r and r.discrepancy %}<div><span class="badge b-err">differs from announced by {{ r.discrepancy|num(2) }}</span></div>{% endif %}</td>
+  <td>{% if row.rank and row.rank[0] %}{{ row.rank[0] }}{% if row.rank[1] %} (tie){% endif %}{% else %}—{% endif %}</td>
+  <td>{{ r.announced_value|num(event.score_display_decimals) if r else '—' }}</td>
+  <td class="small">{% if s.status == 'available' %}{{ s.respondents }} respondent{{ 's' if s.respondents != 1 }}:
+      {% for k, v in s.by_category.items() %}{{ k|label }} {{ v }}{{ ', ' if not loop.last }}{% endfor %}{% else %}<span class="badge">{{ s.status|label }}</span>{% endif %}</td>
+  <td>{% if row.clip %}<span class="badge {{ 'b-ok' if row.clip.status in ('rendered','reviewed','shared') else 'b-err' if row.clip.status in ('failed','unavailable') else 'b-warn' }}">{{ row.clip.status|label }}</span>{% if row.clip.duration_s %} <span class="small">{{ row.clip.duration_s|dur }}</span>{% endif %}{% else %}—{% endif %}</td>
+  <td>{% if row.reviews %}<span class="badge b-warn">{{ row.reviews }} open</span>{% else %}<span class="muted">—</span>{% endif %}{% if row.stale %} <span class="badge b-warn">{{ row.stale }} stale file{{ 's' if row.stale != 1 }}</span>{% endif %}</td>
+  <td><span class="badge {{ 'b-ok' if row.c.status == 'approved' else 'b-err' if row.c.status == 'failed' else '' }}">{{ row.c.status }}</span></td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% endblock %}

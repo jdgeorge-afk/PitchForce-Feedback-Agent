@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <title>{% block title %}{{ theme.brand }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <style>:root{--primary: {{ theme.primary }}; --accent: {{ theme.accent }};}</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/">{{ theme.brand }}</a>
+  {% if user %}
+  <nav aria-label="Main">
+    <a href="/">Events</a>
+    <a href="/settings">Settings</a>
+    <span class="small" style="opacity:.8">{{ user.email }}</span>
+    <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="link" type="submit">Sign out</button></form>
+  </nav>
+  {% endif %}
+</header>
+{% if event and event.is_sample %}<div class="sample-banner" role="note">SAMPLE MODE — this event uses synthetic data. Outputs are demonstrations, not real event results.</div>{% endif %}
+<main id="main">
+  {% for f in flashes %}<div class="flash {{ f.k }}" role="status">{{ f.m }}</div>{% endfor %}
+  {% if event %}
+  <div class="row" style="justify-content:space-between">
+    <div>
+      <h1>{{ event.name }}</h1>
+      <p class="sub">{{ event.event_date.strftime('%B %d, %Y') }} · {{ event.format|label }} · {{ event.timezone }}{% if event.is_sample %} · <span class="badge b-sample">Sample</span>{% endif %}</p>
+    </div>
+  </div>
+  {% set p = request.url.path %}
+  <nav class="tabs" aria-label="Event sections">
+    <a href="/events/{{ event.id }}" class="{{ 'active' if p == '/events/' ~ event.id }}">Overview</a>
+    <a href="/events/{{ event.id }}/sources" class="{{ 'active' if '/sources' in p }}">Sources</a>
+    <a href="/events/{{ event.id }}/people" class="{{ 'active' if '/people' in p }}">Companies &amp; people</a>
+    <a href="/events/{{ event.id }}/review" class="{{ 'active' if '/review' in p }}">Review queue{% if open_reviews %}<span class="count">{{ open_reviews }}</span>{% endif %}</a>
+    <a href="/events/{{ event.id }}/results" class="{{ 'active' if '/results' in p or '/companies/' in p }}">Results &amp; reports</a>
+    <a href="/events/{{ event.id }}/downloads" class="{{ 'active' if '/downloads' in p }}">Downloads</a>
+    <a href="/events/{{ event.id }}/jobs" class="{{ 'active' if '/jobs' in p }}">Activity</a>
+    <a href="/events/{{ event.id }}/settings" class="{{ 'active' if p.endswith('/settings') }}">Event settings</a>
+  </nav>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer>PitchForce Feedback · private operator application · nothing is emailed or shared automatically</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

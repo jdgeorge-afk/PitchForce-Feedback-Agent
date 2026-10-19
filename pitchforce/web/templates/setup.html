@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:40px auto">
+  <h1>Create the administrator account</h1>
+  <p class="sub">This page is available only until the first account exists.</p>
+  <form method="post" action="/setup">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="name">Your name</label><input id="name" type="text" name="name">
+    <label for="email">Email</label><input id="email" type="email" name="email" required>
+    <label for="password">Password (at least 10 characters)</label><input id="password" type="password" name="password" required minlength="10" autocomplete="new-password">
+    <label for="password2">Repeat password</label><input id="password2" type="password" name="password2" required minlength="10" autocomplete="new-password">
+    <p><button type="submit">Create account</button></p>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <p class="sub">Items the application could not settle on its own. Nothing here is guessed for you; each decision is recorded with your name.</p>
+  <div class="row small"><a href="?show=open" class="{{ 'badge b-info' if show == 'open' }}">Open</a> <a href="?show=all" class="{{ 'badge b-info' if show == 'all' }}">All</a></div>
+</div>
+{% if not groups %}<div class="card"><p><strong>Nothing to review.</strong> {% if show == 'open' %}All items are resolved.{% endif %}</p></div>{% endif %}
+{% for kind, items in groups.items() %}
+<h2>{{ titles.get(kind, kind|label) }} <span class="badge">{{ items|length }}</span></h2>
+{% for it in items %}
+<div class="card" id="r-{{ it.id }}">
+  <div class="row" style="justify-content:space-between">
+    <div><span class="badge {{ 'b-err' if it.severity == 'high' else 'b-warn' if it.severity == 'medium' else '' }}">{{ it.severity }}</span>
+      {% if it.company_id and cmap.get(it.company_id) %}<a class="badge b-info" href="/events/{{ event.id }}/companies/{{ it.company_id }}">{{ cmap[it.company_id].display_name }}</a>{% endif %}
+      <strong>{{ it.title }}</strong></div>
+    <span class="badge">{{ it.status }}</span>
+  </div>
+  {% if it.detail %}<p>{{ it.detail }}</p>{% endif %}
+  {% set evd = it.evidence or {} %}
+  {% if evd.get('excerpt') %}<div class="excerpt">{{ evd.excerpt }}{% if evd.get('at') %} — {{ evd.at }}{% endif %}</div>{% endif %}
+  {% if evd.get('evidence') %}<ul class="small">{% for e in evd.evidence %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+  {% if evd.get('items') %}<ul class="small">{% for e in evd['items'] %}<li>{{ e.detail }} <span class="muted">({{ e.strength }})</span></li>{% endfor %}</ul>{% endif %}
+  {% if evd.get('names') %}<p class="small">Names in the transcript: {{ evd.names|join(', ') }}</p>{% endif %}
+  {% if evd.get('choices') %}<p class="small">Choices: {{ evd.choices|join(' · ') }}</p>{% endif %}
+  {% if evd.get('resolution') %}<p class="small muted">Decision: {{ evd.resolution }}</p>{% endif %}
+  {% if it.status == 'open' %}
+  <form method="post" action="/events/{{ event.id }}/review/{{ it.id }}" class="row" style="margin-top:8px">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    {% if it.kind in ('company_match',) and it.target_id %}
+      <button name="decision" value="confirm">{{ (it.options[0].label if it.options else 'Confirm match') }}</button>
+      <button class="secondary" name="decision" value="reject">Not the same</button>
+      <select name="scope"><option value="event">This event only</option><option value="global">All events</option></select>
+    {% elif it.kind == 'related_entity' %}
+      <select name="decision">{% for o in it.options %}<option value="{{ o.value }}">{{ o.label }}</option>{% endfor %}</select>
+      <select name="scope"><option value="event">This event only</option><option value="global">All events</option></select>
+      <button>Record</button>
+    {% elif it.kind == 'score' and it.dedupe_key.startswith('absence:') %}
+      <select name="person_id"><option value="">Which judge?</option>{% for j in judges %}<option value="{{ j.id }}" {{ 'selected' if j.id == it.target_id }}>{{ j.display_name }}</option>{% endfor %}</select>
+      <button name="decision" value="confirm_absent">Confirm this judge was absent</button>
+      <button class="secondary" name="decision" value="not_absent">Not confirmed</button>
+    {% elif it.kind == 'score' and it.target_type == 'score_company_label' %}
+      <select name="choice"><option value="">Which company?</option>{% for c in companies %}<option value="{{ c.id }}">{{ c.display_name }}</option>{% endfor %}</select>
+      <select name="scope"><option value="event">This event only</option><option value="global">All events</option></select>
+      <button name="decision" value="matched">Match</button>
+    {% elif it.kind == 'score' and it.target_type == 'score_judge_label' %}
+      <select name="choice"><option value="">Which judge?</option>{% for j in judges %}<option value="{{ j.id }}">{{ j.display_name }}</option>{% endfor %}</select>
+      <select name="scope"><option value="event">This event only</option><option value="global">All events</option></select>
+      <button name="decision" value="matched">Match</button>
+    {% elif it.kind == 'interest_assignment' %}
+      <select name="choice"><option value="">Which company?</option>{% for c in companies %}<option value="{{ c.id }}" {{ 'selected' if c.id == (evd.get('proposed_company_id') or '') }}>{{ c.display_name }}</option>{% endfor %}</select>
+      {% if it.target_type == 'company_label' %}<select name="scope"><option value="event">This event only</option><option value="global">All events</option></select>{% endif %}
+      <button name="decision" value="assign">Assign</button>
+    {% elif it.kind == 'timezone' %}
+      {% for o in it.options %}<button class="secondary" name="decision" value="{{ o.value }}">{{ o.label }}</button>{% endfor %}
+    {% elif it.kind == 'interest_conflict' %}
+      <button class="secondary" name="decision" value="keep">Keep both selections (follow up carefully)</button>
+      <button class="secondary" name="decision" value="treat_not_interested">Treat as not interested</button>
+    {% elif it.kind == 'contact' and it.options %}
+      {% for o in it.options %}<button class="secondary" name="decision" value="{{ o.value }}">{{ o.label }}</button>{% endfor %}
+    {% elif it.kind == 'boundary' %}
+      {% if it.company_id %}<a class="btn secondary small" href="/events/{{ event.id }}/companies/{{ it.company_id }}?tab=video">Check in the video player</a>
+      <a class="btn secondary small" href="/events/{{ event.id }}/companies/{{ it.company_id }}?tab=transcript">Check in the transcript</a>{% endif %}
+      <button name="decision" value="confirm">Boundary is correct</button>
+    {% elif it.kind == 'alignment' %}
+      <a class="btn secondary small" href="/events/{{ event.id }}/settings">Enter recording start time</a>
+      <button class="secondary" name="decision" value="accept">Checked in the player — accept</button>
+    {% else %}
+      <button class="secondary" name="decision" value="acknowledged">Acknowledge</button>
+    {% endif %}
+    <input type="text" name="note" placeholder="Note (optional)" style="max-width:240px">
+    <button class="link" name="decision" value="dismiss">Dismiss</button>
+  </form>
+  {% else %}
+  <form method="post" action="/events/{{ event.id }}/review/{{ it.id }}"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="link" name="decision" value="reopen">Reopen</button></form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endfor %}
+{% endblock %}

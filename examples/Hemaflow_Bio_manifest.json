@@ -1,0 +1,84 @@
+{
+  "package": "founder",
+  "company": "Hemaflow Bio",
+  "event": "SAMPLE \u2014 Synthetic Life Science Virtual PitchForce",
+  "event_date": "2026-09-17",
+  "generated_at": "2026-10-19T21:09:48Z",
+  "app_version": "0.1.0",
+  "sample_data": true,
+  "files": [
+    {
+      "name": "Hemaflow_Bio_PitchForce_Feedback.pdf",
+      "kind": "report_pdf",
+      "sha256": "bbc24e43c87d18ef8eb92c101bfd98ea5d586a53716b53a1f346e30a6a450f60",
+      "bytes": 7824
+    },
+    {
+      "name": "Hemaflow_Bio_PitchForce_Feedback.docx",
+      "kind": "report_docx",
+      "sha256": "fc4b055a4d78d5f061bac499c614a7338794a595b9e805bf65ef2d0272494ea4",
+      "bytes": 40018
+    },
+    {
+      "name": "Hemaflow_Bio_Investor_Follow-up.xlsx",
+      "kind": "interest_xlsx",
+      "sha256": "0e3cd538dad923973f8e237baeee0e8e0cda2af1b0bce89de83974022d5692f0",
+      "bytes": 8080
+    },
+    {
+      "name": "Hemaflow_Bio_email_draft.txt",
+      "kind": "email_txt",
+      "sha256": "9e3f85ddf7ba2fce0a9933098ad2dad8a5907e15b044af14ca9877bf31c5faf0",
+      "bytes": 968
+    },
+    {
+      "name": "Hemaflow_Bio_Evidence_Appendix.html",
+      "kind": "evidence_html",
+      "sha256": "6454540d2a5758b62eff7f26f15569e2853cf6530e6a4447f339a7014662e44b",
+      "bytes": 5625
+    }
+  ],
+  "source_versions": [
+    {
+      "name": "SAMPLE_company_roster.csv",
+      "kind": "company_roster",
+      "sha256": "16bbad7855f05d7c69c4b7a05bd31b249745fb0eb48f31aae576e5a73fdeb9b9"
+    },
+    {
+      "name": "SAMPLE_judge_roster.csv",
+      "kind": "judge_roster",
+      "sha256": "41e68b026b7242d4952f8612344daebad6c0d26b84e83867eb3355784de9113f"
+    },
+    {
+      "name": "SAMPLE_meeting_transcript.txt",
+      "kind": "transcript",
+      "sha256": "8081caaebde505b903442bcc37bdfc5fb4dfb52b350468cbcf987e99f204ba52"
+    },
+    {
+      "name": "SAMPLE_recording_transcript.vtt",
+      "kind": "transcript",
+      "sha256": "7da1f45071efafceb4fe91a7d71fddd5ce79dfca3f88a09b06a6f180f3795a87"
+    },
+    {
+      "name": "SAMPLE_judge_scores.xlsx",
+      "kind": "scores",
+      "sha256": "3bc51358ad61c7a85108d6390fb36a3fb25bec67c6d56df1c4b75521bec8fa9f"
+    },
+    {
+      "name": "report_Follow-Up- Presenting Hemaflow Bio (SAMPLE).csv",
+      "kind": "interest",
+      "sha256": "4b120ca850d5af8b4696000b03db66db96076fc588414ec0f5bf7861e4dbfee3"
+    },
+    {
+      "name": "SAMPLE_interest_responses.xlsx",
+      "kind": "interest",
+      "sha256": "5ca912abb83d2f51d925f0b35133a1109283389796f8fba7c1b64cb5e1a3761f"
+    }
+  ],
+  "limitations": [
+    "Video clip not included: No video recording was uploaded for this event..",
+    "Unresolved review item: Response 50: name \u201cAlex Marin\u201d with an email that belongs to \u201cTom Becker\u201d on the roster"
+  ],
+  "report_word_count": 696,
+  "input_hash": "bff575fd8bf5c1462b8ee1b57258048ef1fcaeffdbd25aa6783b6eb971bc8c55"
+}

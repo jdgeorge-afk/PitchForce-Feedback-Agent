@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Settings</h1>
+<nav class="tabs" aria-label="Settings sections">
+  {% for sct in sections %}<a href="?section={{ sct }}" class="{{ 'active' if sct == section }}">{{ {'wording':'Report wording & theme','best-practices':'Best practices','services':'Services & AI','calendar':'Calendar sources','integrations':'Integrations','users':'Users'}[sct] }}</a>{% endfor %}
+</nav>
+
+{% if section == 'wording' %}
+<form method="post" action="/settings/wording" class="card" style="max-width:900px"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <h2 style="margin-top:0">Theme</h2>
+  <div class="grid g3"><div><label>Brand text</label><input type="text" name="brand" value="{{ theme.brand }}"></div>
+    <div><label>Primary color</label><input type="text" name="primary" value="{{ theme.primary }}"></div><div><label>Accent color</label><input type="text" name="accent" value="{{ theme.accent }}"></div></div>
+  <p class="help">Official EcoVG brand assets were not supplied, so the app uses clean text branding. Colors are #RRGGBB.</p>
+  <h2>Report options</h2>
+  <label class="inline"><input type="checkbox" name="advisory_enabled" {{ 'checked' if wording.get('advisory_enabled', True) }}> Include the short optional advisory invitation (no prices)</label>
+  <h2>Interest response categories</h2>
+  <p class="help">One rule per line: <code>regular expression =&gt; category</code>. Categories: invest, meeting, due_diligence, more_info, free_resource, introduction, mentoring, not_interested. First matching rule wins; unmatched responses are “unknown”. Leave blank to keep the current rules.</p>
+  <textarea class="tall" name="rules">{% for p, c in rules %}{{ p }} => {{ c }}
+{% endfor %}</textarea>
+  <p><button>Save</button></p>
+</form>
+
+{% elif section == 'best-practices' %}
+<div class="card" style="max-width:980px">
+  <h2 style="margin-top:0">Current version: {{ bp.version }} <span class="badge b-ok">{{ bp.status }}</span></h2>
+  <p class="small muted">{{ bp.notes }}</p>
+  <h3>Source-document issues</h3>
+  <ul>{% for i in bp.issues %}<li><span class="badge {{ 'b-err' if i.severity == 'high' else 'b-warn' }}">{{ i.severity }}</span> {{ i.text }} <span class="badge">{{ i.status }}</span></li>{% endfor %}</ul>
+  <form method="post" action="/settings/best-practices"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <h3>Principles used in reports</h3>
+    <textarea class="tall" name="principles">{% for p in bp.content.principles %}- {{ p.text }}
+{% endfor %}</textarea>
+    <div class="grid g3">{% for k, v in bp.content.format_guidance.items() %}<div><label>{{ k|label }} events</label><textarea name="format_{{ k }}">{{ v }}</textarea></div>{% endfor %}</div>
+    <label>Follow-up cadence guidance (kept as optional guidance; not an automatic outreach campaign and not added to reports by default)</label>
+    <textarea name="cadence">{{ bp.content.cadence_guidance.text }}</textarea>
+    <div class="grid g3">{% for k, v in bp.content.report_wording.items() %}<div><label>{{ k|label }}</label><textarea name="{{ k }}">{{ v }}</textarea></div>{% endfor %}</div>
+    {% for i in bp.issues if i.status == 'open' %}<label class="inline small"><input type="checkbox" name="issue_{{ i.id }}" value="acknowledged"> Acknowledge: {{ i.text[:90] }}…</label><br>{% endfor %}
+    <label>Version note</label><input type="text" name="notes" placeholder="What changed">
+    <p><button>Save as new approved version</button></p>
+  </form>
+</div>
+<div class="card" style="max-width:980px">
+  <h2 style="margin-top:0">Upload EcoVG guidance documents</h2>
+  <p>Upload the cheat-sheet DOCX files or the ZIP. The importer reads them safely, skips copies in “Old”/archive folders as current policy, detects duplicates, and flags contradictory wording. The documents are reference content only — they never authorize the app to contact anyone.</p>
+  <form method="post" action="/settings/best-practices/upload" enctype="multipart/form-data" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="file" name="file" accept=".docx,.pdf,.zip,.txt,.md" required><button>Read documents</button></form>
+  {% if bp_import %}<h3>Last import: {{ bp_import.filename }} ({{ bp_import.imported_at }})</h3>
+    <div class="table-wrap"><table><thead><tr><th>Document</th><th>Archived copy</th><th>Duplicate</th><th>Characters</th></tr></thead><tbody>
+    {% for d in bp_import.documents %}<tr><td>{{ d.name }}</td><td>{{ 'yes' if d.archived }}</td><td>{{ 'yes' if d.duplicate }}</td><td>{{ d.chars }}</td></tr>{% endfor %}</tbody></table></div>
+    {% for name, text in (bp_import.texts or {}).items() %}<details><summary>{{ name }}</summary><div class="excerpt">{{ text }}</div></details>{% endfor %}
+  {% endif %}
+</div>
+<h3>Version history</h3>
+<ul>{% for v in bp_versions %}<li>v{{ v.version }} — {{ v.status }} — {{ v.created_at|dt }} — {{ v.notes[:120] }}</li>{% endfor %}</ul>
+
+{% elif section == 'services' %}
+<div class="card" style="max-width:900px">
+  <h2 style="margin-top:0">Analysis</h2>
+  <p><span class="badge {{ 'b-ok' if ai_configured else 'b-info' }}">{{ 'AI provider configured' if ai_configured else 'Offline' }}</span> {{ ai }}</p>
+  <p class="help">Configure with AI_PROVIDER=anthropic and ANTHROPIC_API_KEY on the server (never in the browser). Model: {{ s.anthropic_model }}; cost estimate uses ${{ s.ai_price_input_per_mtok }} / ${{ s.ai_price_output_per_mtok }} per million input/output tokens. Every AI result is schema-validated and checked against the transcript; excerpts are always copied from the source.</p>
+  <h2>Transcription</h2>
+  <p><span class="badge {{ 'b-ok' if s.transcription_configured else '' }}">{{ 'configured' if s.transcription_configured else 'not configured' }}</span> {{ transcription }}</p>
+  <p class="help">Recordings are never uploaded to a third party unless this is configured and an operator presses “Transcribe” for a specific video.</p>
+  <h2>Storage and limits</h2>
+  <dl class="kv"><dt>Private storage</dt><dd>{{ s.data_dir }}</dd><dt>Video upload limit</dt><dd>{{ s.max_upload_mb }} MB</dd><dt>Worker concurrency</dt><dd>{{ s.worker_concurrency }}</dd><dt>Retention</dt><dd>{{ (s.retention_days ~ ' days after archive') if s.retention_days else 'until deleted' }}</dd></dl>
+</div>
+
+{% elif section == 'calendar' %}
+<div class="card" style="max-width:980px">
+  <h2 style="margin-top:0">Official EcoVG calendar</h2>
+  <p>Sources: {% for u in s.calendar_url_list %}<a href="{{ u }}" rel="noopener noreferrer" target="_blank">{{ u }}</a>{{ ', ' if not loop.last }}{% endfor %} · allowed hosts: {{ s.calendar_allowed_hosts }}</p>
+  <p>Last retrieval: <strong>{{ cal.get('fetched_at') or 'never' }}</strong> <span class="badge {{ 'b-ok' if cal.get('status') == 'ok' else 'b-warn' }}">{{ cal.get('status') }}</span> · cache {{ s.calendar_cache_hours }} h</p>
+  {% for e in cal.get('errors', []) %}<p class="small" style="color:var(--err)">{{ e }}</p>{% endfor %}
+  <form method="post" action="/settings/calendar/refresh"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button>Refresh now</button></form>
+  <p class="help">Dates are verified on each event's own page (calendar file) before a session is called upcoming. Sessions are judged upcoming against the time a report is generated. The app does not monitor for new announcements on its own; use Refresh.</p>
+  <div class="table-wrap"><table><thead><tr><th>Title</th><th>Starts (UTC)</th><th>Verified</th><th>Upcoming</th></tr></thead><tbody>
+  {% for x in sessions %}<tr><td><a href="{{ x.detail_url }}" rel="noopener noreferrer" target="_blank">{{ x.title }}</a></td><td>{{ x.start_at_utc|dt }}</td><td>{{ 'yes' if x.verified_on_detail else 'no' }}</td><td>{{ 'yes' if x.start_at_utc and x.start_at_utc > now else 'past' }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">No sessions retrieved yet.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+
+{% elif section == 'integrations' %}
+<div class="card" style="max-width:900px">
+  <h2 style="margin-top:0">Integrations</h2>
+  <ul>
+    <li><strong>Zoom account</strong> — not required. Upload recordings, transcripts and poll exports directly. A Zoom share link can be stored per event as a reference.</li>
+    <li><strong>Email (Outlook)</strong> — not configured. Email drafts are generated as text for you to copy; nothing is sent. An Outlook draft integration can be added later as an extension.</li>
+    <li><strong>Cloud object storage</strong> — local private storage is in use ({{ s.data_dir }}). See docs/DEPLOYMENT.md for S3-compatible storage.</li>
+  </ul>
+</div>
+
+{% elif section == 'users' %}
+<div class="card" style="max-width:900px">
+  <h2 style="margin-top:0">Users</h2>
+  {% if user.is_admin %}
+  <table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th></th></tr></thead><tbody>
+  {% for u in users %}<tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ 'admin' if u.is_admin else 'operator' }}{% if u.disabled %} <span class="badge b-err">disabled</span>{% endif %}</td>
+  <td>{% if u.id != user.id %}<form method="post" action="/settings/users" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="user_id" value="{{ u.id }}">
+    <select name="event_id">{% for e in events %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select><button class="small secondary" name="action" value="grant">Give access</button>
+    <button class="small secondary" name="action" value="disable">{{ 'Enable' if u.disabled else 'Disable' }}</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+  <h3>Add a user</h3>
+  <form method="post" action="/settings/users" class="grid g3"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="create">
+    <div><label>Email</label><input type="email" name="email" required></div><div><label>Name</label><input type="text" name="name"></div><div><label>Temporary password (10+ characters)</label><input type="password" name="password" required minlength="10"></div>
+    <div><label class="inline"><input type="checkbox" name="is_admin"> Administrator</label></div><div><button>Create user</button></div></form>
+  {% else %}<p>Only administrators can manage users.</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

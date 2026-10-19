@@ -1,0 +1,42 @@
+# Local / single-server deployment: PostgreSQL + web + background worker sharing a private data volume.
+#   cp .env.example .env   (set SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD)
+#   docker compose up --build
+# Then open http://localhost:8000
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: pitchforce
+      POSTGRES_USER: pitchforce
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitchforce-local}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pitchforce"]
+      interval: 5s
+      retries: 20
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://pitchforce:${POSTGRES_PASSWORD:-pitchforce-local}@db:5432/pitchforce
+      DATA_DIR: /data
+    ports: ["8000:8000"]
+    volumes: [appdata:/data]
+    depends_on:
+      db: {condition: service_healthy}
+
+  worker:
+    build: .
+    command: ["python", "-m", "pitchforce", "worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://pitchforce:${POSTGRES_PASSWORD:-pitchforce-local}@db:5432/pitchforce
+      DATA_DIR: /data
+    volumes: [appdata:/data]
+    depends_on:
+      db: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  appdata:

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+{% if is_new %}<h1>New event</h1><p class="sub">Basic event information. You can change any of this later.</p>{% endif %}
+<form method="post" action="{{ '/events/new' if is_new else '/events/' ~ event.id ~ '/settings' }}" class="card" style="max-width:860px">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <div class="grid g2">
+    <div><label for="name">Event name</label><input id="name" type="text" name="name" required value="{{ event.name if event else '' }}" placeholder="Life Science Virtual PitchForce"></div>
+    <div><label for="event_date">Event date</label><input id="event_date" type="date" name="event_date" required value="{{ event.event_date if event else '' }}"></div>
+    <div><label for="timezone">Event timezone</label><select id="timezone" name="timezone">
+      {% for tz in timezones %}<option value="{{ tz }}" {{ 'selected' if (event and event.timezone == tz) or (not event and tz == 'America/Los_Angeles') }}>{{ tz }}</option>{% endfor %}</select></div>
+    <div><label for="format">Format</label><select id="format" name="format">
+      {% for v, l in [('virtual','Virtual'),('in_person','In person'),('hybrid','Hybrid')] %}<option value="{{ v }}" {{ 'selected' if event and event.format == v }}>{{ l }}</option>{% endfor %}</select></div>
+  </div>
+  <h2>Judging</h2>
+  <div class="grid g2">
+    <div><label for="ejc">Expected number of judges</label><input id="ejc" type="number" min="1" max="50" name="expected_judge_count" value="{{ event.expected_judge_count if event else 6 }}"></div>
+    <div><label for="dec">Decimals shown for totals</label><input id="dec" type="number" min="0" max="3" name="score_display_decimals" value="{{ event.score_display_decimals if event else 1 }}"><p class="help">Full precision is kept internally.</p></div>
+    <div><label for="pol">Missing-judge rule</label><select id="pol" name="missing_judge_policy">
+      <option value="one_absent_mean" {{ 'selected' if not event or event.missing_judge_policy == 'one_absent_mean' }}>Standard: if exactly one judge is confirmed absent, add the mean of the submitted scores</option>
+      <option value="mean_for_confirmed_missing" {{ 'selected' if event and event.missing_judge_policy == 'mean_for_confirmed_missing' }}>Extended (event policy): add the mean for each confirmed-missing judge</option>
+      <option value="none" {{ 'selected' if event and event.missing_judge_policy == 'none' }}>No adjustment</option></select>
+      <p class="help">The adjustment never applies just because a file is missing scores; absence must be confirmed.</p></div>
+    <div><label class="inline"><input type="checkbox" name="allow_fractional_scores" {{ 'checked' if not event or event.allow_fractional_scores }}> Allow fractional scores (e.g. 3.5)</label></div>
+  </div>
+  <h2>Recording and polls (optional)</h2>
+  <div class="grid g2">
+    <div><label for="wid">Zoom meeting/webinar ID</label><input id="wid" type="text" name="webinar_id" value="{{ (event.webinar_id or '') if event else '' }}" placeholder="884 0647 0439"><p class="help">Used to match poll launches to this event.</p></div>
+    <div><label for="rs">Recording start time (event clock)</label><input id="rs" type="text" name="recording_start_wallclock" value="{{ (event.recording_start_wallclock or '') if event else '' }}" placeholder="15:00:14"><p class="help">Only needed when the transcript uses wall-clock times and no recording-relative VTT is available.</p></div>
+    <div><label for="rl">Replay / Zoom share link</label><input id="rl" type="url" name="replay_link" value="{{ (event.replay_link or '') if event else '' }}" placeholder="https://…"><p class="help">Stored as a reference link only. A share page is not a downloadable source file; upload the MP4 for clips. Do not paste passcodes here.</p></div>
+    <div><label class="inline"><input type="checkbox" name="include_score_in_clip" {{ 'checked' if event and event.include_score_in_clip }}> Also make a clip variant that includes the score announcement</label></div>
+  </div>
+  <p><button type="submit">{{ 'Create event' if is_new else 'Save settings' }}</button></p>
+</form>
+{% if event and not is_new %}
+<div class="card" style="max-width:860px">
+  <h2>Archive or delete</h2>
+  <form method="post" action="/events/{{ event.id }}/archive" class="row"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="secondary" type="submit">Archive event</button><span class="help">Hides it from the dashboard. {% if settings.retention_days %}Archived events are deleted after {{ settings.retention_days }} days.{% else %}No automatic deletion is configured.{% endif %}</span></form>
+  <form method="post" action="/events/{{ event.id }}/delete" data-confirm="Permanently delete this event and all of its files?" style="margin-top:14px">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="confirm">Type the event name to permanently delete it and all uploaded and generated files</label>
+    <div class="row"><input id="confirm" type="text" name="confirm" style="max-width:420px"><button class="danger" type="submit">Delete permanently</button></div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
